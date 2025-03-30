@@ -27,7 +27,11 @@ pub const State = struct {
         if (addr % 4 != 0) return Error.SegFault;
         const page = self.mem.get(@intCast(addr >> 12)) orelse return Error.SegFault;
         const a = addr % (1 << 12);
-        return @as(*u32, @ptrCast(@alignCast(&page[a]))).*;
+        const b0: u32 = page[a + 0];
+        const b1: u32 = page[a + 1];
+        const b2: u32 = page[a + 2];
+        const b3: u32 = page[a + 3];
+        return (b3 << 24) | (b2 << 16) | (b1 << 8) | (b0 << 0);
     }
     fn write_byte(self: *State, addr: u32, byte: u8) Error!void {
         const page = self.mem.get(@intCast(addr >> 12)) orelse return Error.SegFault;
@@ -37,10 +41,10 @@ pub const State = struct {
         if (addr % 4 != 0) return Error.SegFault;
         const page = self.mem.get(@intCast(addr >> 12)) orelse return Error.SegFault;
         const a = addr % (1 << 12);
-        page[a] = @truncate(word >> 24);
-        page[a + 1] = @truncate(word >> 16);
-        page[a + 2] = @truncate(word >> 8);
-        page[a + 3] = @truncate(word);
+        page[a + 3] = @truncate(word >> 24);
+        page[a + 2] = @truncate(word >> 16);
+        page[a + 1] = @truncate(word >> 8);
+        page[a + 0] = @truncate(word >> 0);
     }
     fn get_reg(self: *State, reg: u3) u32 {
         return switch (reg) {
