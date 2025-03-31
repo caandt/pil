@@ -23,6 +23,8 @@ pub const Inst = union(enum) {
     Ld: packed struct { op: u7 = 16 << 1, rd: u3, rs: u3, i: u19 },
     St: packed struct { op: u7 = 17 << 1, rs: u3, rd: u3, i: u19 },
 
+    Sys: packed struct { op: u7 = 18 << 1, i: u25 },
+
     pub fn decode(n: u32) ?Inst {
         if (n & 1 == 1) return .{ .Li = @bitCast(n) };
         return switch ((n >> 1) % (1 << 5)) {

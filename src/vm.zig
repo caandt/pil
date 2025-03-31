@@ -2,7 +2,7 @@ const std = @import("std");
 
 const inst = @import("inst.zig").Inst;
 
-pub const Error = error{ SegFault, InvalidInst };
+pub const Error = error{ SegFault, InvalidInst, Exit };
 pub const State = struct {
     r0: u32 = 0,
     r1: u32 = 0,
@@ -166,6 +166,18 @@ pub const State = struct {
             .St => |i| {
                 const a = self.get_reg(i.rs);
                 try self.write_word(self.get_reg(i.rd) + i.i, a);
+            },
+            .Sys => |i| {
+                switch (i.i) {
+                    0 => return Error.Exit,
+                    1 => {
+                        inline for (std.meta.fields(State)) |f| {
+                            if (f.type != u32) continue;
+                            std.debug.print("{s}: {}\n", .{ f.name, @field(self, f.name) });
+                        }
+                    },
+                    else => return Error.InvalidInst,
+                }
             },
         }
         self.pc +%= 4;
