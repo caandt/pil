@@ -2,7 +2,7 @@ const std = @import("std");
 
 const inst = @import("inst.zig").Inst;
 
-pub const Error = error{ SegFault, InvalidInst, Exit };
+pub const Error = error{ SegFault, InvalidInst, Exit, OutOfMemory };
 pub const State = struct {
     r0: u32 = 0,
     r1: u32 = 0,
@@ -15,36 +15,38 @@ pub const State = struct {
     pc: u32 = 0,
     mem: std.AutoHashMap(u20, *[0x1000]u8),
     allocator: std.mem.Allocator,
-    pub fn init(allocator: std.mem.Allocator) !State {
+    pub fn init(allocator: std.mem.Allocator) Error!State {
         const mem = std.AutoHashMap(u20, *[0x1000]u8).init(allocator);
         return State{ .mem = mem, .allocator = allocator };
     }
+    fn get_page(self: *State, n: u20) Error!*[0x1000]u8 {
+        return self.mem.get(n) orelse {
+            const new = try self.allocator.create([0x1000]u8);
+            @memset(new, 0);
+            try self.mem.put(n, new);
+            return new;
+        };
+    }
     pub fn read_byte(self: *State, addr: u32) Error!u8 {
-        const page = self.mem.get(@intCast(addr >> 12)) orelse return Error.SegFault;
+        const page = try self.get_page(@intCast(addr >> 12));
         return page[addr % (1 << 12)];
     }
     pub fn read_word(self: *State, addr: u32) Error!u32 {
-        if (addr % 4 != 0) return Error.SegFault;
-        const page = self.mem.get(@intCast(addr >> 12)) orelse return Error.SegFault;
-        const a = addr % (1 << 12);
-        const b0: u32 = page[a + 0];
-        const b1: u32 = page[a + 1];
-        const b2: u32 = page[a + 2];
-        const b3: u32 = page[a + 3];
+        const b0: u32 = try self.read_byte(addr);
+        const b1: u32 = try self.read_byte(addr + 1);
+        const b2: u32 = try self.read_byte(addr + 2);
+        const b3: u32 = try self.read_byte(addr + 3);
         return (b3 << 24) | (b2 << 16) | (b1 << 8) | (b0 << 0);
     }
     pub fn write_byte(self: *State, addr: u32, byte: u8) Error!void {
-        const page = self.mem.get(@intCast(addr >> 12)) orelse return Error.SegFault;
+        const page = try self.get_page(@intCast(addr >> 12));
         page[addr % (1 << 12)] = byte;
     }
     pub fn write_word(self: *State, addr: u32, word: u32) Error!void {
-        if (addr % 4 != 0) return Error.SegFault;
-        const page = self.mem.get(@intCast(addr >> 12)) orelse return Error.SegFault;
-        const a = addr % (1 << 12);
-        page[a + 3] = @truncate(word >> 24);
-        page[a + 2] = @truncate(word >> 16);
-        page[a + 1] = @truncate(word >> 8);
-        page[a + 0] = @truncate(word >> 0);
+        try self.write_byte(addr + 0, @truncate(word >> 0));
+        try self.write_byte(addr + 1, @truncate(word >> 8));
+        try self.write_byte(addr + 2, @truncate(word >> 16));
+        try self.write_byte(addr + 3, @truncate(word >> 24));
     }
     fn get_reg(self: *State, reg: u3) u32 {
         return switch (reg) {
