@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const inst = @import("inst.zig");
+const inst = @import("inst.zig").Inst;
 
 pub const Error = error{ SegFault, InvalidInst };
 pub const State = struct {

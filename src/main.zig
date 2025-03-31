@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const inst = @import("inst.zig");
+const Inst = @import("inst.zig").Inst;
 const loader = @import("loader.zig");
 const vm = @import("vm.zig");
 
