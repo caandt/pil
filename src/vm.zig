@@ -178,6 +178,23 @@ pub const State = struct {
                             std.debug.print("{s}: {}\n", .{ f.name, @field(self, f.name) });
                         }
                     },
+                    2 => {
+                        var j = self.r0;
+                        while (true) {
+                            const b = try self.read_byte(j);
+                            if (b == 0) break;
+                            std.debug.print("{c}", .{b});
+                            j += 1;
+                        }
+                    },
+                    3 => {
+                        const buf = try self.allocator.alloc(u8, self.r1);
+                        defer self.allocator.free(buf);
+                        const j = std.io.getStdIn().readAll(buf) catch 0;
+                        for (0..j) |k| {
+                            try self.write_byte(@truncate(self.r0 + k), buf[k]);
+                        }
+                    },
                     else => return Error.InvalidInst,
                 }
             },
