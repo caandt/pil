@@ -58,12 +58,21 @@ fn assemble_line(line: []const u8) !?Inst {
     }
     return Error.InvalidInstruction;
 }
-pub fn assemble(src: []const u8) ![]Inst {
+pub fn assemble(src: []const u8, allocator: std.mem.Allocator) ![]Inst {
     var it = std.mem.splitScalar(u8, src, '\n');
-    var insts = std.ArrayList(Inst).init(std.heap.page_allocator);
+    var insts = std.ArrayList(Inst).init(allocator);
+    errdefer insts.deinit();
     while (it.next()) |l| {
         const next = try assemble_line(l);
         if (next) |inst| try insts.append(inst);
     }
     return insts.toOwnedSlice();
+}
+pub fn assemble_file(name: []const u8, allocator: std.mem.Allocator) ![]Inst {
+    const file = try std.fs.cwd().openFile(name, .{});
+    defer file.close();
+    const src = try file.readToEndAlloc(allocator, std.math.maxInt(usize));
+    defer allocator.free(src);
+
+    return assemble(src, allocator);
 }

@@ -5,8 +5,19 @@ const loader = @import("loader.zig");
 const vm = @import("vm.zig");
 
 pub fn main() !void {
-    var s = try vm.State.init(std.heap.page_allocator);
-    try loader.load(&s, "a");
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const argv = std.os.argv;
+
+    if (argv.len < 2) {
+        std.debug.print("Usage: {s} <.s file>\n", .{argv[0]});
+        return;
+    }
+
+    var s = try vm.State.init(allocator);
+    try loader.load_asm(&s, std.mem.span(argv[1]));
     while (true)
         try s.step();
 }

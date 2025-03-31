@@ -19,11 +19,11 @@ pub const State = struct {
         const mem = std.AutoHashMap(u20, *[0x1000]u8).init(allocator);
         return State{ .mem = mem, .allocator = allocator };
     }
-    fn read_byte(self: *State, addr: u32) Error!u8 {
+    pub fn read_byte(self: *State, addr: u32) Error!u8 {
         const page = self.mem.get(@intCast(addr >> 12)) orelse return Error.SegFault;
         return page[addr % (1 << 12)];
     }
-    fn read_word(self: *State, addr: u32) Error!u32 {
+    pub fn read_word(self: *State, addr: u32) Error!u32 {
         if (addr % 4 != 0) return Error.SegFault;
         const page = self.mem.get(@intCast(addr >> 12)) orelse return Error.SegFault;
         const a = addr % (1 << 12);
@@ -33,11 +33,11 @@ pub const State = struct {
         const b3: u32 = page[a + 3];
         return (b3 << 24) | (b2 << 16) | (b1 << 8) | (b0 << 0);
     }
-    fn write_byte(self: *State, addr: u32, byte: u8) Error!void {
+    pub fn write_byte(self: *State, addr: u32, byte: u8) Error!void {
         const page = self.mem.get(@intCast(addr >> 12)) orelse return Error.SegFault;
         page[addr % (1 << 12)] = byte;
     }
-    fn write_word(self: *State, addr: u32, word: u32) Error!void {
+    pub fn write_word(self: *State, addr: u32, word: u32) Error!void {
         if (addr % 4 != 0) return Error.SegFault;
         const page = self.mem.get(@intCast(addr >> 12)) orelse return Error.SegFault;
         const a = addr % (1 << 12);
