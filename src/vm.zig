@@ -2,7 +2,7 @@ const std = @import("std");
 
 const inst = @import("inst.zig").Inst;
 
-pub const Error = error{ SegFault, InvalidInst, Exit, OutOfMemory };
+pub const Error = error{ SegFault, InvalidInst, Exit, OutOfMemory, UnknownSyscall };
 pub const State = struct {
     r0: u32 = 0,
     r1: u32 = 0,
@@ -195,7 +195,7 @@ pub const State = struct {
                             try self.write_byte(@truncate(self.r0 + k), buf[k]);
                         }
                     },
-                    else => return Error.InvalidInst,
+                    else => return Error.UnknownSyscall,
                 }
             },
         }

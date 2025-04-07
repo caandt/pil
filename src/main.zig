@@ -18,6 +18,11 @@ pub fn main() !void {
 
     var s = try vm.State.init(allocator);
     try loader.load_asm(&s, std.mem.span(argv[1]));
-    while (true)
-        try s.step();
+    while (true) {
+        s.step() catch |err| {
+            if (err == vm.Error.Exit) break;
+            return err;
+        };
+    }
+    std.debug.print("exited.\n", .{});
 }
