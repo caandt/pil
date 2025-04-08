@@ -22,6 +22,7 @@ pub fn load_asm(state: *vm.State, name: []const u8) !void {
     while (i < insts.len) {
         const buf = try state.allocator.create([0x1000]u8);
         try state.mem.put(@truncate(i * 4 >> 12), buf);
+        try state.perms.put(@truncate(i * 4 >> 12), 0b111);
         for (i..i + 0x1000 / 4) |j| {
             if (j >= insts.len) {
                 try state.write_word(@intCast(j * 4), 0);

@@ -14,20 +14,33 @@ pub const State = struct {
     lr: u32 = 0,
     pc: u32 = 0,
     mem: std.AutoHashMap(u20, *[0x1000]u8),
+    perms: std.AutoHashMap(u20, u3),
     allocator: std.mem.Allocator,
     pub fn init(allocator: std.mem.Allocator) Error!State {
         const mem = std.AutoHashMap(u20, *[0x1000]u8).init(allocator);
-        return State{ .mem = mem, .allocator = allocator };
+        const perms = std.AutoHashMap(u20, u3).init(allocator);
+        return State{ .mem = mem, .allocator = allocator, .perms = perms };
     }
     fn get_page(self: *State, n: u20) Error!*[0x1000]u8 {
         return self.mem.get(n) orelse {
             const new = try self.allocator.create([0x1000]u8);
             @memset(new, 0);
+            try self.perms.put(n, 0b100);
             try self.mem.put(n, new);
             return new;
         };
     }
+    fn readable(self: *State, addr: u32) bool {
+        return (self.perms.get(@intCast(addr >> 12)) orelse 0) & 4 != 0;
+    }
+    fn writable(self: *State, addr: u32) bool {
+        return (self.perms.get(@intCast(addr >> 12)) orelse 0) & 2 != 0;
+    }
+    fn executable(self: *State, addr: u32) bool {
+        return (self.perms.get(@intCast(addr >> 12)) orelse 0) & 1 != 0;
+    }
     pub fn read_byte(self: *State, addr: u32) Error!u8 {
+        if (!self.readable(addr)) return Error.SegFault;
         const page = try self.get_page(@intCast(addr >> 12));
         return page[addr % (1 << 12)];
     }
@@ -39,6 +52,7 @@ pub const State = struct {
         return (b3 << 24) | (b2 << 16) | (b1 << 8) | (b0 << 0);
     }
     pub fn write_byte(self: *State, addr: u32, byte: u8) Error!void {
+        if (!self.writable(addr)) return Error.SegFault;
         const page = try self.get_page(@intCast(addr >> 12));
         page[addr % (1 << 12)] = byte;
     }
@@ -73,6 +87,7 @@ pub const State = struct {
         }
     }
     pub fn step(self: *State) Error!void {
+        if (!self.executable(self.pc)) return Error.SegFault;
         const inst_bytes = try self.read_word(self.pc);
         const curr_inst = inst.decode(inst_bytes) orelse return Error.InvalidInst;
         std.debug.print("{}\n", .{curr_inst});
@@ -183,7 +198,11 @@ pub const State = struct {
                         while (true) {
                             const b = try self.read_byte(j);
                             if (b == 0) break;
-                            std.debug.print("{c}", .{b});
+                            if (self.r1 == 0) {
+                                std.debug.print("{c}", .{b});
+                            } else {
+                                std.debug.print("{x:02}", .{b});
+                            }
                             j += 1;
                         }
                     },
