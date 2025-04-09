@@ -184,6 +184,26 @@ pub const State = struct {
                 const a = self.get_reg(i.rs);
                 try self.write_word(self.get_reg(i.rd) + i.i, a);
             },
+            .Sftl => |i| {
+                const a = self.get_reg(i.rs1);
+                const b = self.get_reg(i.rs2);
+                self.set_reg(i.rd, a << @truncate(b));
+            },
+            .Sftr => |i| {
+                const a = self.get_reg(i.rs1);
+                const b = self.get_reg(i.rs2);
+                self.set_reg(i.rd, a >> @truncate(b));
+            },
+            .Seq => |i| {
+                const a = self.get_reg(i.rs1);
+                const b = self.get_reg(i.rs2);
+                self.set_reg(i.rd, if (a == b) 1 else 0);
+            },
+            .Slt => |i| {
+                const a = self.get_reg(i.rs1);
+                const b = self.get_reg(i.rs2);
+                self.set_reg(i.rd, if (a < b) 1 else 0);
+            },
             .Sys => |i| {
                 switch (i.i) {
                     0 => return Error.Exit,
