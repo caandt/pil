@@ -3,6 +3,59 @@ const std = @import("std");
 const inst = @import("inst.zig").Inst;
 
 pub const Error = error{ SegFault, InvalidInst, Exit, OutOfMemory, UnknownSyscall };
+pub const Mem = struct {
+    mem: std.AutoHashMap(u20, *[0x1000]u8),
+    perms: std.AutoHashMap(u20, u3),
+    default_perm: u3 = 0b100,
+    write_unchecked: bool = false,
+    allocator: std.mem.Allocator,
+    pub fn init(allocator: std.mem.Allocator) Mem {
+        const mem = std.AutoHashMap(u20, *[0x1000]u8).init(allocator);
+        const perms = std.AutoHashMap(u20, u3).init(allocator);
+        return .{ .mem = mem, .perms = perms, .allocator = allocator };
+    }
+    pub fn get_page(self: *Mem, n: u20) Error!*[0x1000]u8 {
+        return self.mem.get(n) orelse {
+            const new = try self.allocator.create([0x1000]u8);
+            @memset(new, 0);
+            try self.perms.put(n, self.default_perm);
+            try self.mem.put(n, new);
+            return new;
+        };
+    }
+    pub fn readable(self: *Mem, addr: u32) bool {
+        return (self.perms.get(@intCast(addr >> 12)) orelse self.default_perm) & 4 != 0;
+    }
+    pub fn writable(self: *Mem, addr: u32) bool {
+        return self.write_unchecked or (self.perms.get(@intCast(addr >> 12)) orelse self.default_perm) & 2 != 0;
+    }
+    pub fn executable(self: *Mem, addr: u32) bool {
+        return (self.perms.get(@intCast(addr >> 12)) orelse self.default_perm) & 1 != 0;
+    }
+    pub fn read_byte(self: *Mem, addr: u32) Error!u8 {
+        if (!self.readable(addr)) return Error.SegFault;
+        const page = try self.get_page(@intCast(addr >> 12));
+        return page[addr % (1 << 12)];
+    }
+    pub fn read_word(self: *Mem, addr: u32) Error!u32 {
+        const b0: u32 = try self.read_byte(addr);
+        const b1: u32 = try self.read_byte(addr + 1);
+        const b2: u32 = try self.read_byte(addr + 2);
+        const b3: u32 = try self.read_byte(addr + 3);
+        return (b3 << 24) | (b2 << 16) | (b1 << 8) | (b0 << 0);
+    }
+    pub fn write_byte(self: *Mem, addr: u32, byte: u8) Error!void {
+        if (!self.writable(addr)) return Error.SegFault;
+        const page = try self.get_page(@intCast(addr >> 12));
+        page[addr % (1 << 12)] = byte;
+    }
+    pub fn write_word(self: *Mem, addr: u32, word: u32) Error!void {
+        try self.write_byte(addr + 0, @truncate(word >> 0));
+        try self.write_byte(addr + 1, @truncate(word >> 8));
+        try self.write_byte(addr + 2, @truncate(word >> 16));
+        try self.write_byte(addr + 3, @truncate(word >> 24));
+    }
+};
 pub const State = struct {
     r0: u32 = 0,
     r1: u32 = 0,
@@ -13,54 +66,10 @@ pub const State = struct {
     sp: u32 = 0,
     lr: u32 = 0,
     pc: u32 = 0,
-    mem: std.AutoHashMap(u20, *[0x1000]u8),
-    perms: std.AutoHashMap(u20, u3),
+    mem: Mem,
     allocator: std.mem.Allocator,
     pub fn init(allocator: std.mem.Allocator) Error!State {
-        const mem = std.AutoHashMap(u20, *[0x1000]u8).init(allocator);
-        const perms = std.AutoHashMap(u20, u3).init(allocator);
-        return State{ .mem = mem, .allocator = allocator, .perms = perms };
-    }
-    fn get_page(self: *State, n: u20) Error!*[0x1000]u8 {
-        return self.mem.get(n) orelse {
-            const new = try self.allocator.create([0x1000]u8);
-            @memset(new, 0);
-            try self.perms.put(n, 0b100);
-            try self.mem.put(n, new);
-            return new;
-        };
-    }
-    fn readable(self: *State, addr: u32) bool {
-        return (self.perms.get(@intCast(addr >> 12)) orelse 0) & 4 != 0;
-    }
-    fn writable(self: *State, addr: u32) bool {
-        return (self.perms.get(@intCast(addr >> 12)) orelse 0) & 2 != 0;
-    }
-    fn executable(self: *State, addr: u32) bool {
-        return (self.perms.get(@intCast(addr >> 12)) orelse 0) & 1 != 0;
-    }
-    pub fn read_byte(self: *State, addr: u32) Error!u8 {
-        if (!self.readable(addr)) return Error.SegFault;
-        const page = try self.get_page(@intCast(addr >> 12));
-        return page[addr % (1 << 12)];
-    }
-    pub fn read_word(self: *State, addr: u32) Error!u32 {
-        const b0: u32 = try self.read_byte(addr);
-        const b1: u32 = try self.read_byte(addr + 1);
-        const b2: u32 = try self.read_byte(addr + 2);
-        const b3: u32 = try self.read_byte(addr + 3);
-        return (b3 << 24) | (b2 << 16) | (b1 << 8) | (b0 << 0);
-    }
-    pub fn write_byte(self: *State, addr: u32, byte: u8) Error!void {
-        if (!self.writable(addr)) return Error.SegFault;
-        const page = try self.get_page(@intCast(addr >> 12));
-        page[addr % (1 << 12)] = byte;
-    }
-    pub fn write_word(self: *State, addr: u32, word: u32) Error!void {
-        try self.write_byte(addr + 0, @truncate(word >> 0));
-        try self.write_byte(addr + 1, @truncate(word >> 8));
-        try self.write_byte(addr + 2, @truncate(word >> 16));
-        try self.write_byte(addr + 3, @truncate(word >> 24));
+        return State{ .mem = Mem.init(allocator), .allocator = allocator };
     }
     fn get_reg(self: *State, reg: u3) u32 {
         return switch (reg) {
@@ -75,6 +84,7 @@ pub const State = struct {
         };
     }
     fn set_reg(self: *State, reg: u3, val: u32) void {
+        std.debug.print("r{} = {}\n", .{ reg, val });
         switch (reg) {
             0 => self.r0 = val,
             1 => self.r1 = val,
@@ -87,8 +97,8 @@ pub const State = struct {
         }
     }
     pub fn step(self: *State) Error!void {
-        if (!self.executable(self.pc)) return Error.SegFault;
-        const inst_bytes = try self.read_word(self.pc);
+        if (!self.mem.executable(self.pc)) return Error.SegFault;
+        const inst_bytes = try self.mem.read_word(self.pc);
         const curr_inst = inst.decode(inst_bytes) orelse return Error.InvalidInst;
         std.debug.print("{}\n", .{curr_inst});
         switch (curr_inst) {
@@ -177,12 +187,12 @@ pub const State = struct {
                 return;
             },
             .Ld => |i| {
-                const a = try self.read_word(self.get_reg(i.rs) + i.i);
+                const a = try self.mem.read_word(self.get_reg(i.rs) + i.i);
                 self.set_reg(i.rd, a);
             },
             .St => |i| {
                 const a = self.get_reg(i.rs);
-                try self.write_word(self.get_reg(i.rd) + i.i, a);
+                try self.mem.write_word(self.get_reg(i.rd) + i.i, a);
             },
             .Sftl => |i| {
                 const a = self.get_reg(i.rs);
@@ -214,7 +224,7 @@ pub const State = struct {
                     2 => {
                         var j = self.r0;
                         while (true) {
-                            const b = try self.read_byte(j);
+                            const b = try self.mem.read_byte(j);
                             if (b == 0) break;
                             if (self.r1 == 0) {
                                 std.debug.print("{c}", .{b});
@@ -225,12 +235,20 @@ pub const State = struct {
                         }
                     },
                     3 => {
-                        const buf = try self.allocator.alloc(u8, self.r1);
-                        defer self.allocator.free(buf);
-                        const j = std.io.getStdIn().readAll(buf) catch 0;
-                        for (0..j) |k| {
-                            try self.write_byte(@truncate(self.r0 + k), buf[k]);
+                        const stdin = std.io.getStdIn().reader();
+                        const bare_line = stdin.readUntilDelimiterAlloc(self.allocator, '\n', 0x100) catch "";
+                        defer self.allocator.free(bare_line);
+                        const line = std.mem.trim(u8, bare_line, "\r");
+                        for (0..line.len, line) |k, c| {
+                            try self.mem.write_byte(@truncate(self.r0 + k), c);
                         }
+                    },
+                    4 => {
+                        const stdin = std.io.getStdIn().reader();
+                        const bare_line = stdin.readUntilDelimiterAlloc(self.allocator, '\n', 0x100) catch "";
+                        defer self.allocator.free(bare_line);
+                        const line = std.mem.trim(u8, bare_line, "\r");
+                        self.r0 = std.fmt.parseInt(u32, line, 0) catch 0;
                     },
                     else => return Error.UnknownSyscall,
                 }
