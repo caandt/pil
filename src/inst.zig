@@ -23,8 +23,8 @@ pub const Inst = union(enum) {
     Ld: packed struct { op: u7 = 16 << 1, rd: u3, rs: u3, i: u19 },
     St: packed struct { op: u7 = 17 << 1, rs: u3, rd: u3, i: u19 },
 
-    Sftl: packed struct { op: u7 = 18 << 1, rd: u3, rs1: u3, rs2: u3, _pad: u16 = 0 },
-    Sftr: packed struct { op: u7 = 19 << 1, rd: u3, rs1: u3, rs2: u3, _pad: u16 = 0 },
+    Sftl: packed struct { op: u7 = 18 << 1, rd: u3, rs: u3, i: u5, _pad: u14 = 0 },
+    Sftr: packed struct { op: u7 = 19 << 1, rd: u3, rs: u3, i: u5, _pad: u14 = 0 },
     Seq: packed struct { op: u7 = 20 << 1, rd: u3, rs1: u3, rs2: u3, _pad: u16 = 0 },
     Slt: packed struct { op: u7 = 21 << 1, rd: u3, rs1: u3, rs2: u3, _pad: u16 = 0 },
 

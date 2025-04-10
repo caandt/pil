@@ -185,14 +185,12 @@ pub const State = struct {
                 try self.write_word(self.get_reg(i.rd) + i.i, a);
             },
             .Sftl => |i| {
-                const a = self.get_reg(i.rs1);
-                const b = self.get_reg(i.rs2);
-                self.set_reg(i.rd, a << @truncate(b));
+                const a = self.get_reg(i.rs);
+                self.set_reg(i.rd, a << i.i);
             },
             .Sftr => |i| {
-                const a = self.get_reg(i.rs1);
-                const b = self.get_reg(i.rs2);
-                self.set_reg(i.rd, a >> @truncate(b));
+                const a = self.get_reg(i.rs);
+                self.set_reg(i.rd, a >> i.i);
             },
             .Seq => |i| {
                 const a = self.get_reg(i.rs1);
