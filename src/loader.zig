@@ -16,20 +16,28 @@ pub fn load(state: *vm.State, name: []const u8) !void {
 }
 
 pub fn load_asm(state: *vm.State, name: []const u8) !void {
-    const insts = try assembler.assemble_file(name, state.allocator);
-    defer state.allocator.free(insts);
-    var i: u32 = 0;
-    while (i < insts.len) {
-        const buf = try state.allocator.create([0x1000]u8);
-        try state.mem.put(@truncate(i * 4 >> 12), buf);
-        try state.perms.put(@truncate(i * 4 >> 12), 0b111);
-        for (i..i + 0x1000 / 4) |j| {
-            if (j >= insts.len) {
-                try state.write_word(@intCast(j * 4), 0);
-            } else {
-                try state.write_word(@intCast(j * 4), insts[j].encode());
+    state.mem = try assembler.assemble_file(name, state.allocator);
+}
+
+const Error = error{InvalidELF};
+pub fn load_elf(state: *vm.State, name: []const u8) !void {
+    const file = try std.fs.cwd().openFile(name, .{});
+    defer file.close();
+    const f = try std.fs.cwd().openFile(name, .{});
+    defer f.close();
+    const header = try std.elf.Header.read(file);
+    var it = header.program_header_iterator(file);
+    while (try it.next()) |h| {
+        try f.seekTo(h.p_offset);
+        if (h.p_type == std.elf.PT_LOAD) {
+            var i: usize = 0;
+            while (i < h.p_filesz) {
+                const buf = try state.allocator.create([0x1000]u8);
+                try state.mem.mem.put(@intCast((h.p_vaddr + i) >> 12), buf);
+                try state.mem.perms.put(@intCast((h.p_vaddr + i) >> 12), @truncate(h.p_flags));
+                i += try f.read(buf);
             }
         }
-        i += 0x1000 / 4;
     }
+    state.pc = @truncate(header.entry);
 }

@@ -21,6 +21,7 @@ pub fn main() !void {
     while (true) {
         s.step() catch |err| {
             if (err == vm.Error.Exit) break;
+            std.debug.print("{x}\n", .{s.pc});
             return err;
         };
     }
